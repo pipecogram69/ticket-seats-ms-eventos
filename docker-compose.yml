@@ -1,0 +1,67 @@
+x-pg: &pg
+  image: postgres:16
+  environment: &pgenv
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+    interval: 3s
+    timeout: 3s
+    retries: 20
+
+services:
+  pg-catalogo:
+    <<: *pg
+    container_name: pg-catalogo
+    environment:
+      <<: *pgenv
+      POSTGRES_DB: ticketseats_catalogo
+    ports: ["5434:5432"]
+    volumes:
+      - pgdata_catalogo:/var/lib/postgresql/data
+      - ./sql/catalogo.sql:/docker-entrypoint-initdb.d/01-catalogo.sql
+
+  pg-shard1:
+    <<: *pg
+    container_name: pg-shard1
+    environment:
+      <<: *pgenv
+      POSTGRES_DB: ticketseats_shard1
+    ports: ["5435:5432"]
+    volumes:
+      - pgdata_shard1:/var/lib/postgresql/data
+      - ./sql/shard.sql:/docker-entrypoint-initdb.d/01-shard.sql
+
+  pg-shard2:
+    <<: *pg
+    container_name: pg-shard2
+    environment:
+      <<: *pgenv
+      POSTGRES_DB: ticketseats_shard2
+    ports: ["5436:5432"]
+    volumes:
+      - pgdata_shard2:/var/lib/postgresql/data
+      - ./sql/shard.sql:/docker-entrypoint-initdb.d/01-shard.sql
+
+  ms-eventos:
+    build: .
+    container_name: ms-eventos
+    restart: on-failure
+    environment:
+      JWT_SECRET: cambia-esto-en-produccion
+      CATALOGO_DSN: postgresql://postgres:postgres@pg-catalogo:5432/ticketseats_catalogo
+      SHARD1_DSN: postgresql://postgres:postgres@pg-shard1:5432/ticketseats_shard1
+      SHARD2_DSN: postgresql://postgres:postgres@pg-shard2:5432/ticketseats_shard2
+    ports: ["8002:8002"]
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      pg-catalogo: { condition: service_healthy }
+      pg-shard1:   { condition: service_healthy }
+      pg-shard2:   { condition: service_healthy }
+
+volumes:
+  pgdata_catalogo:
+  pgdata_shard1:
+  pgdata_shard2:
+  uploads:
