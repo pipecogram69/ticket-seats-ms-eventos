@@ -59,3 +59,29 @@ CREATE TABLE condicion_comercial (
 ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(255);
 
 ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(255);
+CREATE TABLE IF NOT EXISTS condicion_comercial (
+  id_evento              UUID PRIMARY KEY REFERENCES evento(id_evento) ON DELETE CASCADE,
+  max_boletas_por_compra SMALLINT NOT NULL DEFAULT 6 CHECK (max_boletas_por_compra BETWEEN 1 AND 20),
+  minutos_reserva        SMALLINT NOT NULL DEFAULT 10 CHECK (minutos_reserva BETWEEN 1 AND 60),
+  inicio_venta           TIMESTAMPTZ,
+  fin_venta              TIMESTAMPTZ,
+  cargo_servicio_pct     NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (cargo_servicio_pct BETWEEN 0 AND 100),
+  permite_devolucion     BOOLEAN NOT NULL DEFAULT FALSE,
+  CHECK (fin_venta IS NULL OR inicio_venta IS NULL OR fin_venta > inicio_venta)
+);
+ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(255);
+ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_data BYTEA;
+ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_tipo VARCHAR(20);
+CREATE TABLE IF NOT EXISTS condicion_comercial (
+  id_evento              UUID PRIMARY KEY REFERENCES evento(id_evento) ON DELETE CASCADE,
+  max_boletas_por_compra SMALLINT NOT NULL DEFAULT 6 CHECK (max_boletas_por_compra BETWEEN 1 AND 20),
+  minutos_reserva        SMALLINT NOT NULL DEFAULT 10 CHECK (minutos_reserva BETWEEN 1 AND 60),
+  inicio_venta           TIMESTAMPTZ,
+  fin_venta              TIMESTAMPTZ,
+  cargo_servicio_pct     NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (cargo_servicio_pct BETWEEN 0 AND 100),
+  permite_devolucion     BOOLEAN NOT NULL DEFAULT FALSE,
+  CHECK (fin_venta IS NULL OR inicio_venta IS NULL OR fin_venta > inicio_venta)
+);
+ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(255);
+ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_data BYTEA;
+ALTER TABLE evento ADD COLUMN IF NOT EXISTS imagen_tipo VARCHAR(20);

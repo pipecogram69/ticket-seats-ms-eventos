@@ -7,9 +7,9 @@ shards: dict[int, asyncpg.Pool] = {}
 
 async def init_pools():
     global catalogo
-    catalogo = await asyncpg.create_pool(CATALOGO_DSN, min_size=1, max_size=5)
+    catalogo = await asyncpg.create_pool(CATALOGO_DSN, min_size=0, max_inactive_connection_lifetime=60, max_size=5)
     for id_shard, dsn in SHARD_DSNS.items():
-        shards[id_shard] = await asyncpg.create_pool(dsn, min_size=1, max_size=10)
+        shards[id_shard] = await asyncpg.create_pool(dsn, min_size=0, max_inactive_connection_lifetime=60, max_size=10)
 
 
 async def close_pools():
