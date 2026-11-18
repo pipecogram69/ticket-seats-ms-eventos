@@ -376,13 +376,18 @@ async def confirmar(data: IdsIn, user=Depends(requiere_roles("CLIENTE", "ADMIN")
 
 # ---------- Imágenes de eventos ----------
 import os
+from io import BytesIO
 from uuid import uuid4
+
+import cloudinary
+from cloudinary import uploader
 
 from fastapi import File, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from config import MAX_IMG_BYTES, UPLOAD_DIR
 
+# Se conserva el directorio para poder servir imágenes antiguas
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/imagenes", StaticFiles(directory=UPLOAD_DIR), name="imagenes")
 
@@ -401,31 +406,67 @@ def tipo_imagen(b: bytes) -> str | None:
 async def subir_imagen(id_evento: UUID, archivo: UploadFile = File(...),
                        user=Depends(requiere_roles("ORGANIZADOR", "ADMIN"))):
     sid = await shard_de_evento(id_evento)
+
     data = await archivo.read(MAX_IMG_BYTES + 1)
+
     if len(data) > MAX_IMG_BYTES:
         raise HTTPException(413, "La imagen supera 3 MB")
+
     ext = tipo_imagen(data)
     if not ext:
         raise HTTPException(415, "Formato no permitido: usa JPG, PNG o WEBP")
 
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+    api_key = os.getenv("CLOUDINARY_API_KEY")
+    api_secret = os.getenv("CLOUDINARY_API_SECRET")
+
+    if not all([cloud_name, api_key, api_secret]):
+        raise HTTPException(503, "El almacenamiento de imágenes no está configurado")
+
     async with db.shard_pool(sid).acquire() as conn:
         e = await conn.fetchrow(
-            "SELECT id_organizador::text AS org, imagen_url FROM evento WHERE id_evento = $1", id_evento)
+            "SELECT id_organizador::text AS org, imagen_url FROM evento WHERE id_evento = $1",
+            id_evento
+        )
+
         if not e:
             raise HTTPException(404, "Evento no encontrado")
+
         if user["rol"] != "ADMIN" and e["org"] != user["sub"]:
             raise HTTPException(403, "Solo el organizador del evento puede cambiar su imagen")
-        nombre = f"{uuid4().hex}{ext}"
-        with open(os.path.join(UPLOAD_DIR, nombre), "wb") as f:
-            f.write(data)
-        url = f"/imagenes/{nombre}"
-        await conn.execute("UPDATE evento SET imagen_url = $1, updated_at = now() WHERE id_evento = $2", url, id_evento)
 
-    if e["imagen_url"]:
-        try:
-            os.remove(os.path.join(UPLOAD_DIR, os.path.basename(e["imagen_url"])))
-        except OSError:
-            pass
+    try:
+        cloudinary.config(
+            cloud_name=cloud_name,
+            api_key=api_key,
+            api_secret=api_secret,
+            secure=True
+        )
+
+        resultado = await asyncio.to_thread(
+            uploader.upload,
+            BytesIO(data),
+            folder="ticketseats/eventos",
+            public_id=uuid4().hex,
+            resource_type="image"
+        )
+
+        url = resultado.get("secure_url")
+
+        if not url:
+            raise RuntimeError("Cloudinary no devolvió una URL segura")
+
+    except Exception as exc:
+        print(f"[cloudinary] Error al subir imagen: {exc}")
+        raise HTTPException(502, "No se pudo guardar la imagen en Cloudinary")
+
+    async with db.shard_pool(sid).acquire() as conn:
+        await conn.execute(
+            "UPDATE evento SET imagen_url = $1, updated_at = now() WHERE id_evento = $2",
+            url,
+            id_evento
+        )
+
     return {"imagen_url": url}
 
 
